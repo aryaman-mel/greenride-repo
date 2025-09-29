@@ -1,2 +1,3 @@
-# makes 'app' a package
-# (so that 'flask --app app.app run' works)
+# app/__init__.py
+from .app import app  # exposes "app" at package level if you want "from app import app"
+from . import routes  # ensures routes are registered

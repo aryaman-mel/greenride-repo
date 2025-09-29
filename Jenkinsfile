@@ -16,20 +16,24 @@ pipeline {
     }
 
     stage('Test') {
-  agent {
-    docker {
-      image 'python:3.11-slim'
-      // run container as root to avoid pip permission issue
-      args '-u root:root'
-    }
-  }
   steps {
     sh '''
-      python -m venv .venv
+      set -euxo pipefail
+
+      # 1) Create and activate venv
+      python3 -m venv .venv
       . .venv/bin/activate
-      pip install --upgrade pip
+
+      # 2) Upgrade pip and install deps
+      python -m pip install --upgrade pip
       pip install -r app/requirements.txt
-      pytest -q --cov=app --cov-report xml:coverage.xml tests --rootdir=.
+
+      # 3) Ensure Python sees the repo root (so "import app" works)
+      export PYTHONPATH=$PWD
+
+      # 4) Run pytest from the root, collect coverage into coverage.xml
+      pytest -q tests --maxfail=1 --disable-warnings \
+            --cov=app --cov-report xml:coverage.xml
     '''
   }
 }
