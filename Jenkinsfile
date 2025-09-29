@@ -16,26 +16,16 @@ pipeline {
     }
 
     stage('Test') {
-  steps {
-    sh '''
-      set -euxo pipefail
-
-      # 1) Create and activate venv
-      python3 -m venv .venv
-      . .venv/bin/activate
-
-      # 2) Upgrade pip and install deps
-      python -m pip install --upgrade pip
-      pip install -r app/requirements.txt
-
-      # 3) Ensure Python sees the repo root (so "import app" works)
-      export PYTHONPATH=$PWD
-
-      # 4) Run pytest from the root, collect coverage into coverage.xml
-      pytest -q tests --maxfail=1 --disable-warnings \
-            --cov=app --cov-report xml:coverage.xml
-    '''
-  }
+    steps {
+        sh '''#!/bin/bash
+        set -euo pipefail
+        python3 -m venv .venv
+        . .venv/bin/activate
+        pip install --upgrade pip
+        pip install -r app/requirements.txt
+        pytest -q --cov=app --cov-report xml:coverage.xml tests --rootdir=.
+        '''
+    }
 }
 
     stage('Code Quality') {
