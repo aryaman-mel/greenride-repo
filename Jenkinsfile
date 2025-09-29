@@ -29,7 +29,7 @@ pipeline {
       . .venv/bin/activate
       pip install --upgrade pip
       pip install -r app/requirements.txt
-      pytest -q --cov=app --cov-report xml:coverage.xml
+      pytest -q --cov=app --cov-report xml:coverage.xml tests --rootdir=.
     '''
   }
 }
