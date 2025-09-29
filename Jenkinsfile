@@ -16,14 +16,23 @@ pipeline {
     }
 
     stage('Test') {
-      agent { docker { image 'python:3.11-slim' } }
-      steps {
-        sh '''
-          pip install -r app/requirements.txt
-          pytest -q --cov=app --cov-report xml:coverage.xml
-        '''
-      }
+  agent {
+    docker {
+      image 'python:3.11-slim'
+      // run container as root to avoid pip permission issue
+      args '-u root:root'
     }
+  }
+  steps {
+    sh '''
+      python -m venv .venv
+      . .venv/bin/activate
+      pip install --upgrade pip
+      pip install -r app/requirements.txt
+      pytest -q --cov=app --cov-report xml:coverage.xml
+    '''
+  }
+}
 
     stage('Code Quality') {
       steps {
