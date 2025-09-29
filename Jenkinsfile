@@ -28,16 +28,19 @@ pipeline {
     } // Build
 
     stage('Test') {
-      steps {
+    steps {
         sh '''
-          python3 -m venv .venv
-          . .venv/bin/activate
-          pip install --upgrade pip
-          pip install -r app/requirements.txt
-          pytest -q --cov=app --cov-report xml:coverage.xml tests --rootdir=.
+            export PYTHONPATH=$WORKSPACE
+            python3 -m venv .venv
+            . .venv/bin/activate
+            pip install --upgrade pip
+            pip install -r app/requirements.txt
+            pytest -q --cov=app --cov-report xml:coverage.xml tests
         '''
-      }
-    } // Test
+    }
+}
+
+
 
     stage('Code Quality') {
       steps {
