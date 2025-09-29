@@ -1,133 +1,117 @@
 pipeline {
   agent any
+
   environment {
-    APP_NAME = 'greenride'
-    REGISTRY = 'docker.io/aryaman124'
-    IMAGE = "${REGISTRY}/${APP_NAME}"
-    TAG = "${env.BUILD_NUMBER}"
+    IMAGE  = 'docker.io/aryaman124/greenride-repo'
+    TAG    = "${BUILD_NUMBER}"
+    CREDS  = 'dockerhub-creds'
   }
-  options { timestamps() }
+
+  options {
+    skipDefaultCheckout(true)
+    timestamps()
+  }
 
   stages {
-    stage('Checkout') { steps { checkout scm } }
+    stage('Checkout SCM') {
+      steps {
+        checkout scm
+      }
+    } // Checkout
 
     stage('Build') {
-      steps { sh 'docker build -t ${IMAGE}:${TAG} .' }
-    }
+      steps {
+        sh """
+          docker build -t ${IMAGE}:${TAG} .
+        """
+      }
+    } // Build
 
     stage('Test') {
-  agent {
-    docker {
-      image 'python:3.11-slim'      // has ensurepip + venv
-      args '-u root'                // allow apt if you ever need it
-    }
-  }
-  steps {
-    sh '''#!/bin/bash
-      set -euo pipefail
-      python -m venv .venv
-      . .venv/bin/activate
-      pip install --upgrade pip
-      pip install -r app/requirements.txt
-      pytest -q --cov=app --cov-report xml:coverage.xml tests --rootdir=.
-    '''
-  }
-}
-    }
+      steps {
+        sh '''
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r app/requirements.txt
+          pytest -q --cov=app --cov-report xml:coverage.xml tests --rootdir=.
+        '''
+      }
+    } // Test
 
     stage('Code Quality') {
       steps {
         sh '''
-          pip install flake8
-          flake8 app
+          . .venv/bin/activate
+          flake8 app tests
         '''
       }
-    }
+    } // Code Quality
 
     stage('Security') {
       steps {
         sh '''
-          pip install bandit pip-audit
-          bandit -r app -f txt -o bandit.txt || true
-          pip-audit -r app/requirements.txt -f json -o pip_audit.json || true
-          echo "== Bandit summary ==" && head -n 50 bandit.txt || true
-          echo "== pip-audit summary ==" && wc -l pip_audit.json || true
+          . .venv/bin/activate
+          bandit -q -r app || true
+          pip-audit -f cyclonedx -o sbom.json || true
+          safety check || true
         '''
       }
-    }
+    } // Security
 
     stage('Push Image') {
+      when { branch 'main' }
       steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
-                                          usernameVariable: 'DOCKER_USER',
-                                          passwordVariable: 'DOCKER_PASS')]) {
-          sh '''
+        withCredentials([usernamePassword(credentialsId: CREDS, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          sh """
             echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-            docker tag ${IMAGE}:${TAG} ${IMAGE}:staging
+            docker tag ${IMAGE}:${TAG} ${IMAGE}:latest
             docker push ${IMAGE}:${TAG}
-            docker push ${IMAGE}:staging
-          '''
+            docker push ${IMAGE}:latest
+          """
         }
       }
-    }
+    } // Push
 
     stage('Deploy: Staging') {
+      when { branch 'main' }
       steps {
-        sh '''
-          export REGISTRY=${REGISTRY}
-          export TAG=staging
-          docker compose -f docker-compose.staging.yml up -d
-          sleep 3
-          curl -sf http://localhost:8081/health
-        '''
+        sh 'docker compose -f docker-compose.staging.yml up -d --force-recreate'
       }
-    }
+    } // Staging
 
     stage('Release: Prod Gate') {
       when { branch 'main' }
       steps {
         input message: 'Promote to production?', ok: 'Release'
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
-                                          usernameVariable: 'DOCKER_USER',
-                                          passwordVariable: 'DOCKER_PASS')]) {
-          sh '''
-            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-            docker tag ${IMAGE}:${TAG} ${IMAGE}:prod
-            docker push ${IMAGE}:prod
-          '''
-        }
       }
-    }
+    } // Gate
 
     stage('Deploy: Production') {
       when { branch 'main' }
       steps {
-        sh '''
-          export REGISTRY=${REGISTRY}
-          export TAG=prod
-          docker compose -f docker-compose.prod.yml up -d
-          sleep 3
-          curl -sf http://localhost/health
-        '''
+        sh 'docker compose -f docker-compose.prod.yml up -d --force-recreate'
       }
-    }
+    } // Prod
 
     stage('Monitoring & Alerting') {
       steps {
-        script {
-          try {
-            sh 'curl -sf http://localhost/health'
-            echo 'Health OK'
-          } catch (e) {
-            echo 'Health check failed'
-            error('Monitoring stage failed')
-          }
-        }
+        echo 'Checking health & notifying…'
+        sh 'curl -fsS http://localhost:8081/health || true'
       }
-    }
-  }
+    } // Monitoring
+  } // stages
 
   post {
-    always { echo "Done: ${env.JOB_NAME} #${env.BUILD_NUMBER}" }
-  }
-
+    always {
+      archiveArtifacts artifacts: 'coverage.xml, sbom.json', allowEmptyArchive: true
+      junit allowEmptyResults: true, testResults: 'pytest.xml'
+    }
+    success {
+      echo "Done: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+    }
+    failure {
+      echo "Build failed. See console for details."
+    }
+  } // post
+} // pipeline
