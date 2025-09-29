@@ -16,17 +16,24 @@ pipeline {
     }
 
     stage('Test') {
-    steps {
-        sh '''#!/bin/bash
-        set -euo pipefail
-        python3 -m venv .venv
-        . .venv/bin/activate
-        pip install --upgrade pip
-        pip install -r app/requirements.txt
-        pytest -q --cov=app --cov-report xml:coverage.xml tests --rootdir=.
-        '''
+  agent {
+    docker {
+      image 'python:3.11-slim'      // has ensurepip + venv
+      args '-u root'                // allow apt if you ever need it
     }
+  }
+  steps {
+    sh '''#!/bin/bash
+      set -euo pipefail
+      python -m venv .venv
+      . .venv/bin/activate
+      pip install --upgrade pip
+      pip install -r app/requirements.txt
+      pytest -q --cov=app --cov-report xml:coverage.xml tests --rootdir=.
+    '''
+  }
 }
+    }
 
     stage('Code Quality') {
       steps {
