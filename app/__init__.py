@@ -1,3 +1,4 @@
-# app/__init__.py
-from .app import app  # exposes "app" at package level if you want "from app import app"
-from . import routes  # ensures routes are registered
+"""GreenRide Flask app package."""
+from .app import app  # now `from app import app` also works
+
+__all__ = ["app"]
