@@ -2,7 +2,7 @@ pipeline {
   agent any
   environment {
     APP_NAME = 'greenride'
-    REGISTRY = 'docker.io/<your_dockerhub_username>'
+    REGISTRY = 'docker.io/aryaman124'
     IMAGE = "${REGISTRY}/${APP_NAME}"
     TAG = "${env.BUILD_NUMBER}"
   }
