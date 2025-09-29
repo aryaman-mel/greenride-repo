@@ -1,0 +1,6 @@
+services:
+  greenride:
+    image: ${REGISTRY:-docker.io/aryaman124}/greenride:${TAG:-prod}
+    ports:
+      - "80:8000"
+    restart: unless-stopped
